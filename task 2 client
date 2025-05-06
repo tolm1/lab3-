@@ -1,0 +1,33 @@
+//2 задача клиент
+
+#include <boost/asio.hpp>
+#include <iostream>
+#include <string>
+
+using boost::asio::ip::tcp;
+
+int main() {
+    std::setlocale(LC_ALL, "Russian");
+    try {
+        boost::asio::io_context io;
+        tcp::resolver resolver(io);
+        auto endpoints = resolver.resolve("127.0.0.1", "12345");
+        tcp::socket socket(io);
+        boost::asio::connect(socket, endpoints);
+
+        std::cout << "Введите число: ";
+        int number;
+        std::cin >> number;
+        std::string msg = std::to_string(number);
+
+        boost::asio::write(socket, boost::asio::buffer(msg));
+
+        char reply[1024];
+        size_t len = socket.read_some(boost::asio::buffer(reply));
+
+        std::cout << "Факториал от сервера: " << std::string(reply, len) << "\n";
+    }
+    catch (std::exception& e) {
+        std::cerr << "Ошибка: " << e.what() << "\n";
+    }
+}
