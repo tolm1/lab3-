@@ -1,0 +1,141 @@
+// 4 задача, сервак
+
+#include <boost/asio.hpp>
+#include <iostream>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <sstream>
+
+using boost::asio::ip::tcp;
+namespace asio = boost::asio;
+
+uint64_t factorial(uint32_t n) {
+    uint64_t res = 1;
+    for (uint32_t i = 2; i <= n; ++i) res *= i;
+    return res;
+}
+
+class SimpleSession : public std::enable_shared_from_this<SimpleSession> {
+public:
+    SimpleSession(tcp::socket socket,
+        asio::strand<asio::io_context::executor_type>& strand,
+        std::vector<std::string>& log,
+        boost::asio::thread_pool& pool,
+        std::atomic<int>& client_count)
+        : socket_(std::move(socket)),
+        strand_(strand),
+        log_(log),
+        pool_(pool),
+        client_count_(client_count)
+    {
+    }
+
+    ~SimpleSession() {
+        client_count_--;
+    }
+
+    void start() {
+        read();
+    }
+
+private:
+    void read() {
+        auto self = shared_from_this();
+        socket_.async_read_some(asio::buffer(buffer_),
+            [this, self](boost::system::error_code ec, std::size_t len) {
+                if (!ec) {
+                    std::string msg(buffer_.data(), len);
+                    try {
+                        int n = std::stoi(msg);
+                        asio::post(pool_, [this, self, n]() {
+                            uint64_t result = factorial(n);
+                            std::ostringstream oss;
+                            oss << "factorial(" << n << ") = " << result;
+                            std::string res_str = oss.str();
+
+                            asio::post(strand_, [this, res_str]() {
+                                log_.push_back(res_str);
+                                });
+
+                            write(res_str + "\n");
+                            });
+                    }
+                    catch (...) {
+                        write("Invalid input\n");
+                    }
+
+                    read();
+                }
+            });
+    }
+
+    void write(const std::string& msg) {
+        auto self = shared_from_this();
+        asio::async_write(socket_, asio::buffer(msg),
+            [this, self](boost::system::error_code, std::size_t) {});
+    }
+
+    tcp::socket socket_;
+    asio::strand<asio::io_context::executor_type>& strand_;
+    std::vector<std::string>& log_;
+    boost::asio::thread_pool& pool_;
+    std::atomic<int>& client_count_;
+    std::array<char, 1024> buffer_;
+};
+
+class SimpleServer {
+public:
+    SimpleServer(asio::io_context& io, short port, boost::asio::thread_pool& pool)
+        : acceptor_(io, tcp::endpoint(tcp::v4(), port)),
+        strand_(io.get_executor()),
+        pool_(pool),
+        client_count_(0)
+    {
+        accept();
+    }
+
+private:
+    void accept() {
+        acceptor_.async_accept(
+            [this](boost::system::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    if (client_count_ < 2) {
+                        client_count_++;
+                        std::make_shared<SimpleSession>(
+                            std::move(socket), strand_, log_, pool_, client_count_)->start();
+                    }
+                    else {
+                        std::string msg = "Server full (2 clients max).\n";
+                        boost::asio::async_write(socket, boost::asio::buffer(msg),
+                            [s = std::move(socket)](boost::system::error_code, std::size_t) mutable {
+                                s.close();
+                            });
+                    }
+                }
+                accept();
+            });
+    }
+
+    tcp::acceptor acceptor_;
+    asio::strand<asio::io_context::executor_type> strand_;
+    std::vector<std::string> log_;
+    boost::asio::thread_pool& pool_;
+    std::atomic<int> client_count_;
+};
+
+int main() {
+    asio::io_context io;
+    boost::asio::thread_pool pool(2);
+
+    SimpleServer server(io, 12345, pool);
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 2; ++i) {
+        threads.emplace_back([&io]() { io.run(); });
+    }
+
+    for (auto& t : threads) t.join();
+
+    return 0;
+}
