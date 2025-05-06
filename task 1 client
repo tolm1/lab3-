@@ -1,0 +1,36 @@
+// 1 задача с синхроной отправкой
+
+#include <boost/asio.hpp>
+#include <iostream>
+
+using boost::asio::ip::tcp;
+
+
+int main() {
+    std::setlocale(LC_ALL, "Russian");
+    try {
+        boost::asio::io_context io_context;
+
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve("127.0.0.1", "1234");
+        std::cout << "Соединение с сервером установлено.\n";
+        for (;;) {
+            
+            tcp::socket socket(io_context);
+            boost::asio::connect(socket, endpoints);
+
+            
+            std::string msg;
+            std::cout << "Клиент вводит:";
+            std::cin >> msg;
+            boost::asio::write(socket, boost::asio::buffer(msg));
+
+            
+        }
+    }
+    catch (std::exception& e) {
+        std::cerr << "Ошибка: " << e.what() << "\n";
+    }
+
+    return 0;
+}
