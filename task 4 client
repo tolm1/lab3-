@@ -1,0 +1,49 @@
+// 4 задача, клиент
+
+#include <boost/asio.hpp>
+#include <iostream>
+#include <string>
+
+using boost::asio::ip::tcp;
+
+int main() {
+    std::string host = "127.0.0.1";
+    std::string port = "12345";
+
+    try {
+        boost::asio::io_context io_context;
+
+        // Создание соединения
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve(host, port);
+        tcp::socket socket(io_context);
+        boost::asio::connect(socket, endpoints);
+
+        std::cout << "Connected to server at " << host << ":" << port << "\n";
+
+        while (true) {
+            std::cout << "Enter a number (or 'exit' to quit): ";
+            std::string input;
+            std::getline(std::cin, input);
+
+            if (input == "exit") break;
+
+            boost::asio::write(socket, boost::asio::buffer(input));
+
+            boost::asio::streambuf response_buf;
+            boost::asio::read_until(socket, response_buf, "\n");
+            std::istream response_stream(&response_buf);
+            std::string response;
+            std::getline(response_stream, response);
+
+            std::cout << "Server response: " << response << "\n";
+        }
+
+        socket.close();
+    }
+    catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << "\n";
+    }
+
+    return 0;
+}
