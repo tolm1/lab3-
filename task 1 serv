@@ -1,0 +1,39 @@
+// 1 задача с синхронной отправкой
+
+#include <boost/asio.hpp>
+#include <iostream>
+
+using boost::asio::ip::tcp;
+
+int main() {
+    std::setlocale(LC_ALL, "Russian");
+    try {
+        boost::asio::io_context io_context;
+
+        tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), 1234));
+
+        std::cout << "Server is running on port 1234...\n";
+
+        for (;;) {
+            tcp::socket socket(io_context);
+            acceptor.accept(socket);
+
+            std::array<char, 128> data;
+            boost::system::error_code error;
+            size_t length = socket.read_some(boost::asio::buffer(data), error);
+
+            if (!error) {
+                std::cout << "Сервер отвечает:" << std::string(data.data(), length) << std::endl;
+                boost::asio::write(socket, boost::asio::buffer(data, length));
+            }
+            else {
+                std::cerr << "Сервер отвечает: Все сломалось" << error.message() << std::endl;
+            }
+        }
+    }
+    catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << "\n";
+    }
+
+    return 0;
+}
