@@ -1,0 +1,39 @@
+// 3 задача, клиент
+
+#include <boost/asio.hpp>
+#include <iostream>
+#include <string>
+
+using boost::asio::ip::tcp;
+
+int main() {
+    std::setlocale(LC_ALL, "Russian");
+    try {
+        boost::asio::io_context io_context;
+
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve("127.0.0.1", "12345");
+        tcp::socket socket(io_context);
+        boost::asio::connect(socket, endpoints);
+
+        std::string line;
+        while (std::getline(std::cin, line)) {
+            if (line.empty()) continue;
+
+            line += '\n'; // обязательно для read_until
+            boost::asio::write(socket, boost::asio::buffer(line));
+
+            boost::asio::streambuf response;
+            boost::asio::read_until(socket, response, '\n');
+            std::istream is(&response);
+            std::string reply;
+            std::getline(is, reply);
+            std::cout << "Сервер: " << reply << std::endl;
+        }
+    }
+    catch (std::exception& e) {
+        std::cerr << "Ошибка: " << e.what() << "\n";
+    }
+
+    return 0;
+}
